@@ -8,8 +8,8 @@
 /**
  * Implementation of hook_schema()
  */
-function ubercart_csv_schema() {
-  $schema['ubercart_csv_reports'] = array(
+function uc_csv_schema() {
+  $schema['uc_csv_reports'] = array(
     'description' => 'A table of configured reports',
     'fields' => array(
       'rid' => array(
@@ -61,13 +61,13 @@ function ubercart_csv_schema() {
 /** 
  * implementation of hook_install()
  */
-function ubercart_csv_install() {
-  drupal_install_schema('ubercart_csv');
+function uc_csv_install() {
+  drupal_install_schema('uc_csv');
 }
 
 /** 
  * implementation of hook_uninstall()
  */
-function uc_excel_uninstall() {
-  drupal_uninstall_schema('ubercart_csv');
+function uc_csv_uninstall() {
+  drupal_uninstall_schema('uc_csv');
 }
