@@ -190,7 +190,7 @@ function uc_csv_select_report_to_export_submit($form,$form_state) {
     if ($report->products == 1) {
       $product = NULL;
       $calc_attribute = array();
-      $presults = db_query("SELECT title,qty,price,data FROM {uc_order_products} WHERE order_id='%d'",$order->order_id);
+      $presults = db_query("SELECT model,title,qty,price,data FROM {uc_order_products} WHERE order_id='%d'",$order->order_id);
       while($pdata = db_fetch_object($presults)) {
         $data = unserialize($pdata->data);
         if (is_array($data['attributes'])) {
@@ -205,7 +205,7 @@ function uc_csv_select_report_to_export_submit($form,$form_state) {
         } else {
           $title = $pdata->title;
         }
-        $product .= $pdata->qty.' - '.$title.': $'.number_format($pdata->price,2).'ea.';
+        $product .= $pdata->qty.' - '.$title.' ('.$pdata->model.'): $'.number_format($pdata->price,2).'ea.';
       }
       $order->products = $product;
     }
