@@ -1,4 +1,4 @@
-uc_excel - v6.x-2.0
+uc_excel - v6.x-2.1
 by Michael R. Bagnall - mbagnall@elusivemind.com
 
 ** NOTE: This module will ONLY work with Drupal 6 **
