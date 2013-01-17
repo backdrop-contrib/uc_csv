@@ -24,9 +24,8 @@ function uc_csv_schema() {
         'not null' => TRUE),
       'last_exported' => array(
         'description' => 'The date of the last export',
-        'type' => 'datetime',
-        'size' => 'normal',
-        'not null' => TRUE),
+        'mysql_type' => 'datetime',
+        'type' => NULL),
       'last_order_id' => array(
         'description' => 'The last order id exported',
         'type' => 'int',
@@ -62,12 +61,12 @@ function uc_csv_schema() {
  * implementation of hook_install()
  */
 function uc_csv_install() {
-  drupal_install_schema('uc_csv');
+
 }
 
 /** 
  * implementation of hook_uninstall()
  */
 function uc_csv_uninstall() {
-  drupal_uninstall_schema('uc_csv');
+
 }
