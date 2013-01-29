@@ -5,3 +5,5 @@ core = 7.x
 
 dependencies[] = uc_order
 dependencies[] = uc_product
+
+configure = admin/store/export/index

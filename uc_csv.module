@@ -231,23 +231,44 @@ function uc_csv_select_report_to_export_submit($form,$form_state) {
                       WHERE rid=:rid;",array(':last_order_id' => $max_order,':last_exported' => date('Y-m-d H:i:s',time()),
                                              ':rid' => $form_state['values']['rid'])); 
   
-  /* output the file so we download */
-  header('Content-Type: text/x-csv'); 
-  header('Expires: '. gmdate('D, d M Y H:i:s') .' GMT');
-  header('Content-Disposition: inline; filename="'.$_SERVER['SERVER_NAME'].'.csv"');
-  header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-  header('Pragma: public');
+  /* name the report file name after the given name for this report, just make it filename friendly */
+  $file_name = uc_csv_clean_filename($report->report_name);
   
-  print join(",",$headers)."\n";
-  $source = NULL;
-  foreach($complete_order as $order) {
-    foreach ($order as $cell) {
-      $source .= '"'.$cell.'",';
+  if ($report->file_type == 'csv') {
+    /* output the file so we download */
+    header('Content-Type: text/x-csv'); 
+    header('Expires: '. gmdate('D, d M Y H:i:s') .' GMT');
+    header('Content-Disposition: inline; filename="'.$file_name.'.csv"');
+    header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+    header('Pragma: public');
+    
+    print join(",",$headers)."\n";
+    foreach($complete_order as $order) {
+      foreach ($order as $cell) {
+        $source .= '"'.$cell.'",';
+      }
+      $source .= "\n";
     }
-    $source .= "\n";
+    echo $source;
+    exit();
+  } elseif ($report->file_type == 'xls') {
+    module_load_include('inc','uc_csv','inc/excel-export');
+    // generate file (constructor parameters are optional)
+    $xls = new Excel_XML('UTF-8', false, $report->report_name);
+    $data = array($headers);
+    foreach($complete_order as $line) {
+      $set = array();
+      foreach($line as $key => $value) {
+        $set[] = $value;
+      }
+      $data[] = $set;
+    }
+    $xls->addArray($data);
+    $xls->generateXML($file_name);
+    exit();
+  } else {
+    drupal_goto('admin/store/export');
   }
-  echo $source;
-  exit();
 }
 
 function uc_csv_add_new_report($form,&$form_state) {
@@ -309,6 +330,16 @@ function uc_csv_add_new_report($form,&$form_state) {
     ),
     '#description' => t('How you would like your CSV report ordered'),
   );
+  $form['file_type'] = array(
+    '#type' => 'select',
+    '#title' => t('Type of File To Export'),
+    '#default_value' => $report->file_type,
+    '#options' => array(
+      'csv' => 'CSV (Comma Separated Values)',
+      'xls' => 'Microsoft Excel XML Export',
+    ),
+    '#description' => t('The type of file to be exported. Use Excel if trying to export data with special characters (foreign language) in it.'),
+  );
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Save'),
@@ -329,6 +360,7 @@ function uc_csv_add_new_report_submit($form,$form_state) {
       'billing_address' => $billing,
       'products' => $products,
       'orderby' => $form_state['values']['orderby'],
+      'file_type' => $form_state['values']['file_type'],
     );
     $result = drupal_write_record('uc_csv_reports',$array,'rid');
   } else {
@@ -340,6 +372,7 @@ function uc_csv_add_new_report_submit($form,$form_state) {
       'billing_address' => $billing,
       'products' => $products,
       'orderby' => $form_state['values']['orderby'],
+      'file_type' => $form_state['values']['file_type'],
     );
     $result = drupal_write_record('uc_csv_reports',$array);
   }
@@ -396,3 +429,16 @@ function uc_csv_delete_report_submit($form_state, $form) {
   drupal_goto('admin/store/export/index');
 }
 
+function uc_csv_clean_filename($str, $replace=array(), $delimiter='-')
+{
+  setlocale(LC_ALL, 'en_US.UTF8');
+  if( !empty($replace) ) {
+    $str = str_replace((array)$replace, ' ', $str);
+  }
+
+  $clean = iconv('UTF-8', 'ASCII//TRANSLIT', $str);
+  $clean = preg_replace("/[^a-zA-Z0-9\/_|+ -]/", '', $clean);
+  $clean = strtolower(trim($clean, '-'));
+  $clean = preg_replace("/[\/_|+ -]+/", $delimiter, $clean);
+  return $clean;
+}

@@ -51,6 +51,12 @@ function uc_csv_schema() {
         'type' => 'varchar',
         'length' => 32,
         'not null' => TRUE),
+      'file_type' => array(
+        'description' => 'The type of file to be exported',
+        'type' => 'varchar',
+        'length' => 8,
+        'not null' => TRUE
+        'default' => 'csv'),
     ),
     'primary key' => array('rid'),
   );
@@ -69,4 +75,16 @@ function uc_csv_install() {
  */
 function uc_csv_uninstall() {
 
+}
+
+/**
+ * Add a field for the type of file to be exported with a report
+ */
+function uc_csv_update_7203() {
+  db_add_field('uc_csv_reports','file_type',array(
+        'description' => 'The type of file to be exported',
+        'type' => 'varchar',
+        'length' => 8,
+        'not null' => TRUE,
+        'default' => 'csv'));
 }
