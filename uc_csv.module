@@ -18,7 +18,7 @@ function uc_csv_menu() {
     'description' => t('Set up the reports you want to export.'),
     'page callback' => 'uc_csv_report_grid',
     'access callback' => 'user_access',
-    'access arguments' => array('administer csv export settings'),
+    'access arguments' => array('administer ubercart csv export settings'),
     'weight' => -25,
     'type' => MENU_DEFAULT_LOCAL_TASK,
   );
@@ -28,7 +28,7 @@ function uc_csv_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('uc_csv_add_new_report'),
     'access callback' => 'user_access',
-    'access arguments' => array('administer csv export settings'),
+    'access arguments' => array('administer ubercart csv export settings'),
     'weight' => -20,
     'type' => MENU_LOCAL_TASK,
   );
@@ -48,7 +48,7 @@ function uc_csv_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('uc_csv_add_new_report',5),
     'access callback' => 'user_access',
-    'access arguments' => array('administer csv export settings'),
+    'access arguments' => array('administer ubercart csv export settings'),
     'type' => MENU_CALLBACK,
   );
   $items['admin/store/export/reports/delete/%uc_csv_report_id'] = array(
@@ -57,7 +57,7 @@ function uc_csv_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('uc_csv_delete_report',5),
     'access callback' => 'user_access',
-    'access arguments' => array('administer csv export settings'),
+    'access arguments' => array('administer ubercart csv export settings'),
     'type' => MENU_CALLBACK,
   );
 
