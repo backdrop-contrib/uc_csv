@@ -55,26 +55,22 @@ function uc_csv_schema() {
         'description' => 'The type of file to be exported',
         'type' => 'varchar',
         'length' => 8,
-        'not null' => TRUE
+        'not null' => TRUE,
         'default' => 'csv'),
-    ),
+      'statuses' => array(
+        'description' => 'The order statuses to be included in this report',
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => TRUE),
+      'track' => array(
+        'description' => 'Should this report track last exports. Boolean.',
+        'type' => 'int',
+        'length' => 1,
+        'not null' => TRUE),
+     ),
     'primary key' => array('rid'),
   );
   return $schema;
-}
-
-/** 
- * implementation of hook_install()
- */
-function uc_csv_install() {
-
-}
-
-/** 
- * implementation of hook_uninstall()
- */
-function uc_csv_uninstall() {
-
 }
 
 /**
@@ -88,3 +84,30 @@ function uc_csv_update_7203() {
         'not null' => TRUE,
         'default' => 'csv'));
 }
+
+/**
+ * Add a boolean field to determine if last order exported should be tracked per report
+ */
+function uc_csv_update_7204() {
+  db_add_field('uc_csv_reports','track',array(
+    'description' => 'Should this report track last exports. Boolean.',
+    'type' => 'int',
+    'length' => 1,
+    'not null' => TRUE,
+    'default' => '1'));
+}
+
+/**
+ * Add a status field. These are order statuses to be included in report exports.
+ */
+function uc_csv_update_7205() {
+  db_add_field('uc_csv_reports','statuses',
+    array(
+      'description' => 'The order statuses to be included in this report',
+      'type' => 'text',
+      'not null' => TRUE,
+      'size' => 'medium',
+    )
+  );
+}
+
