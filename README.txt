@@ -1,5 +1,5 @@
-uc_excel - v6.x-2.1
-by Michael R. Bagnall - mbagnall@elusivemind.com
+UberCart Export Module - uc_excel
+by Michael R. Bagnall - mrbagnall@icloud.com - @elusivemind
 
 ** NOTE: This module will ONLY work with Drupal 6 **
 
