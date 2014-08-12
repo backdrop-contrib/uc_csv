@@ -197,7 +197,7 @@ function uc_csv_select_report_to_export_submit($form,$form_state)
     $headers = array_merge($headers,array('products','tax','shipping'));
   }
 
-  if ( $report->orderby = 'orderid' ) {
+  if ( $report->orderby == 'orderid' ) {
     $orderby = 'o.order_id ASC';
   } elseif ( $report->orderby == 'last_name' ) { 
     $orderby = 'o.billing_last_name ASC';
