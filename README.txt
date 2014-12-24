@@ -1,7 +1,7 @@
 UberCart Export Module - uc_excel
 by Michael R. Bagnall - mrbagnall@icloud.com - @elusivemind
 
-** NOTE: This module will ONLY work with Drupal 6 **
+** NOTE: This module will ONLY work with Drupal 7 **
 
 The purpose of this module is to export orders from an ubercart store in a manner that
 can be read by any spreadsheet program including Microsoft Excel.
