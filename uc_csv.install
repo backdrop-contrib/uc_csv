@@ -111,3 +111,30 @@ function uc_csv_update_7205() {
   );
 }
 
+));
+}
+
+/**
+ * Add a status field. These are order statuses to be included in report exports.
+ */
+function uc_csv_update_7205() {
+  db_add_field('uc_csv_reports','statuses',
+    array(
+      'description' => 'The order statuses to be included in this report',
+      'type' => 'text',
+      'not null' => TRUE,
+      'size' => 'medium',
+    )
+  );
+}
+
+/**
+ * Add fields to allow emailing of reports to specific users when reports are generated
+ */
+function uc_csv_update_7206() {
+  $schema = uc_csv_schema();
+  db_add_field('uc_csv_reports','report_email_enable',
+       $schema['uc_csv_reports']['description']['email_enable']);
+  db_add_field('uc_csv_reports','report_email_address',
+       $schema['uc_csv_reports']['description']['email_address']);
+}

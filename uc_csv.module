@@ -573,3 +573,266 @@ function uc_csv_clean_filename($str, $replace = array(), $delimiter = '-') {
   $clean = preg_replace("/[\/_|+ -]+/", $delimiter, $clean);
   return $clean;
 }
+e'] = array('#type' => 'hidden', '#value' => $report->report_name);
+  return confirm_form( $form,
+                       t('Are you sure you wish to delete the %report export report?', array('%report' => $report->report_name)),
+                       'admin/store/export/index',
+                       t('This action cannot be undone.'),
+                       t('Delete'),
+                       t('Cancel')
+                     );
+}
+
+/**
+ * Submit Handler for Delete Confirm
+ *
+ * Performs the act of deleting the report
+ */
+function uc_csv_delete_report_submit($form, $form_state) {
+  db_query("DELETE FROM {uc_csv_reports} WHERE rid=:rid", array(':rid' => (int)$form_state['values']['rid']));
+  drupal_set_message(t('%report report successfully deleted', array('%report' => $form_state['values']['report_name'])));
+  drupal_goto('admin/store/export/index');
+}
+
+/**
+ * Clean the file name of the report
+ *
+ * Prevents spaces and oddball characters from appearing in report filenames
+ */
+function uc_csv_clean_filename($str, $replace = array(), $delimiter = '-') {
+  setlocale(LC_ALL, 'en_US.UTF8');
+  if( !empty($replace) ) {
+    $str = str_replace((array)$replace, ' ', $str);
+  }
+
+  $clean = iconv('UTF-8', 'ASCII//TRANSLIT', $str);
+  $clean = preg_replace("/[^a-zA-Z0-9\/_|+ -]/", '', $clean);
+  $clean = strtolower(trim($clean, '-'));
+  $clean = preg_replace("/[\/_|+ -]+/", $delimiter, $clean);
+  return $clean;
+}
+
+
+function uc_csv_generate_report($report) {
+  // If we have specified that only certain status levels are eligible for export, then
+  // assign them here so we know what they are later
+  $statuses = array();
+  foreach(unserialize($report->statuses) as $key=>$value) {
+    if ($value != '0') {
+      $statuses[] = $value;
+    }
+  }
+
+  $selects = array();
+  $country = array();
+  $zone = array();
+  $headers = array('order_id', 'last_name', 'first_name', 'email_address', 'order_total', 'product_count');
+  
+  /* cache the list of countries and states in memory so we don't have to do repeated lookups */
+  $result = db_query("SELECT country_id,country_name FROM {uc_countries}");
+  while ($sdata = $result->fetchObject()) {
+    $country[$sdata->country_id] = $sdata->country_name;
+  }
+
+  $result = db_query("SELECT zone_id,zone_code FROM {uc_zones}");
+  
+  $date_range = NULL;
+  if (isset($report->start_date) && $report->start_date) {
+    $start_date = strtotime($report->start_date);
+    $date_range = 'AND created >= ' . $start_date . ' ';
+  }
+  
+  if (isset($report->end_date) && $report->end_date) {
+    $end_date = strtotime($report->end_date);
+    if (!empty($date_range)) {
+      $date_range .= 'AND created <= ' . $end_date . ' '; 
+    }
+    else {
+      $date_range = 'AND created <= ' . $end_date . ' ';
+    }
+  }
+  
+  while ($sdata = $result->fetchObject()) {
+    $zone[$sdata->zone_id] = $sdata->zone_code;
+  }
+  
+  if ($report->shipping_address == 1) {
+    $selects[] = 'o.delivery_first_name,o.delivery_last_name,o.delivery_phone,o.delivery_company,o.delivery_street1,o.delivery_street2,o.delivery_city,o.delivery_zone,o.delivery_postal_code,o.delivery_country';
+    $headers = array_merge($headers, array('shipping_first_name','shipping_last_name','shipping_phone','shipping_company','shipping_street1','shipping_street2',
+                               'shipping_city','shipping_state','shipping_zipcode','shipping_country'));
+  }
+  
+  if ($report->billing_address == 1) {
+    $selects[] = 'o.billing_phone,o.billing_company,o.billing_street1,o.billing_street2,o.billing_city,o.billing_zone,o.billing_postal_code,o.billing_country';
+	  $headers = array_merge($headers, array('billing_phone','billing_company','billing_street1','billing_street2',
+                               'billing_city','billing_state','billing_zipcode','billing_country'));
+  }
+  
+  if ($report->products == 1) {
+    $headers = array_merge($headers, array('products', 'tax', 'shipping'));
+  }
+
+  if ($report->orderby == 'orderid') {
+    $orderby = 'o.order_id ASC';
+  } 
+  elseif ($report->orderby == 'last_name') { 
+    $orderby = 'o.billing_last_name ASC';
+  } 
+  else {
+    $orderby = 'o.order_id ASC, o.billing_last_name ASC';
+  }
+  
+  if (count($selects) > 0) {
+    $sel = ',' . join(',', $selects);
+  } 
+  else {
+    $sel = NULL;
+  }
+
+  /* reports may have been trackable at one time and then switched to non-trackable. as such we */
+  /* need to track the state of the report. if it is not trackable, then set last_order_id to */
+  /* 0 so that we get all the orders */
+  if (isset($report->track) && $report->track < 1) {
+    $report->last_order_id = 0;
+  }
+
+  $complete_order = array();
+  $result = db_query("SELECT o.order_id, o.billing_last_name, o.billing_first_name, o.primary_email,o.order_total, o.product_count" . $sel . "
+                      FROM {uc_orders} o
+                      WHERE o.order_id > :order_id && o.order_status IN ('" . join("','", $statuses) . "') " . $date_range . "
+                      ORDER BY ".$orderby,array(':order_id' => $report->last_order_id));  
+  while($order = $result->fetchObject())  {
+    /* only deal with the billing stuff if it was selected as part of our order configuration */
+    if ( $report->shipping_address == 1 ) {
+      $order->delivery_zone = $zone[$order->delivery_zone];
+      $order->delivery_country = $country[$order->delivery_country];
+    }
+    
+    /* only deal with the billing stuff if it was selected as part of our order configuration */
+    if ( $report->billing_address == 1 ) {
+      $order->billing_zone = $zone[$order->billing_zone];
+      $order->billing_country = $country[$order->billing_country];
+    }
+    
+    if ($report->products == 1) {
+      $product = NULL;
+      $calc_attribute = array();
+      $presults = db_query("SELECT model,title,qty,price,data 
+                            FROM {uc_order_products} 
+                            WHERE order_id=:order_id", array(':order_id' => $order->order_id));
+      while($pdata = $presults->fetchObject()) {
+        $data = unserialize($pdata->data);
+        if (isset($data['attributes']) && is_array($data['attributes'])) {
+          foreach($data['attributes'] as $key=>$attribute) {
+            foreach($attribute as $display_attribute) {
+              $calc_attribute[] = $key . ": " . $display_attribute; 
+            }
+          }
+        }
+        if (count($calc_attribute)>0) {
+          $title = $pdata->title . " - " . join(',', $calc_attribute);
+        } 
+        else {
+          $title = $pdata->title;
+        }
+        $product .= $pdata->qty . ' - ' . $title . ' (' . $pdata->model . '): $' . number_format($pdata->price, 2) . 'ea.';
+      }
+      $order->products = $product;
+    
+      /* now we need to get the shipping and sales tax data for this order */
+      /* we will do this in two queries for now - first we do tax */
+      $stResult = db_query("SELECT amount AS sales_tax
+                            FROM {uc_order_line_items}
+                            WHERE order_id = :order_id
+                              AND type=:type",array(':order_id' => $order->order_id, ':type' => 'tax'));
+      $stdata = $stResult->fetchObject();
+      $order->sales_tax =(isset($stdata->sales_tax)) ? $stdata->sales_tax : "N/A";
+      
+      /* use the same sort of query to get the shipping amount */
+      $stResult = db_query("SELECT amount AS shipping
+                            FROM {uc_order_line_items}
+                            WHERE order_id = :order_id
+                              AND type=:type",array(':order_id' => $order->order_id,':type' => 'shipping'));
+      $stdata = $stResult->fetchObject();
+      $order->shipping = (isset($stdata->shipping)) ? $stdata->shipping : "N/A";
+    }
+    $complete_order[] = (array)$order;
+  }
+  
+  return array(
+    'order_data' => $complete_order, 
+    'headers' => $headers,
+  );
+}
+
+/**
+ * Save the report
+ *
+ * Take the contents and place into a file. Make the uri to the file part of the report
+ * object so it can be saved when completed
+ */
+function _uc_csv_save_report(&$report, $contents, $file_name) {
+  if (drupal_is_cli() && function_exists('drush_main')) {
+    file_put_contents($file_name, $contents);
+    $report->filepath = getcwd() . '/' . $file_name;
+    drush_log('File successfully saved.', 'ok');
+  }
+  else {
+    if (!file_exists(drupal_realpath('public://uc-csv-reports/'))) {
+      drupal_mkdir('public://uc-csv-reports/');
+    }
+    $destination = 'public://uc-csv-reports/' . $file_name;
+    $filepath = file_unmanaged_save_data($contents, $destination, FILE_EXISTS_REPLACE);
+    if ($filepath != FALSE) {
+      $report->filepath = $filepath;
+    } 
+    else {
+      $report->filepath = FALSE;
+      drupal_set_message('File could not be saved or assigned.', 'error');
+    }
+  }
+}
+
+/**
+ * Implements hook_mail
+ */
+function uc_csv_mail($key, &$message, $params) {
+  if ($key == 'uc_csv_key') {
+    $headers = array(
+      'MIME-Version' => '1.0',
+      'Content-Type' => 'multipart/mixed; boundary="' . $params['boundary'] . '"',
+      'Content-Transfer-Encoding' => '8Bit',
+      'X-Mailer' => 'Drupal',
+    );
+    foreach ($headers as $key => $value) {
+      $message['headers'][$key] = $value;
+    }
+    $message['subject'] = t($params['subject']);
+    $message['body'][] = $params['body'];
+  }
+}
+
+/**
+ * Implements hook_theme
+ */
+function uc_csv_theme($existing, $type, $theme, $path) {
+  return array(
+    'uc_csv_attached_report' => array(
+      'template' => 'uc-csv-attached-report',
+      'arguments' => array('report' => NULL, 'boundary' => NULL, 'contents' => NULL, 'filename' => NULL, 'filesize' => NULL),
+    ),
+  );
+}
+
+/**
+ * Helper to see if cron is running 
+ */
+function _uc_csv_is_cron_running() {
+  if (!lock_acquire('cron', 240.0)) {
+    return TRUE;
+  }
+  else {
+    lock_release('cron');
+    return FALSE;
+  }
+}

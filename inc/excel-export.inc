@@ -83,7 +83,7 @@ class Excel_XML
          */
         public function __construct($sEncoding = 'UTF-8', $bConvertTypes = false, $sWorksheetTitle = 'Table1')
         {
-                $this->bConvertTypes = $bConvertTypes;
+          $this->bConvertTypes = $bConvertTypes;
         	$this->setEncoding($sEncoding);
         	$this->setWorksheetTitle($sWorksheetTitle);
         }
@@ -150,24 +150,18 @@ class Excel_XML
          * Generate the excel file
          * @param string $filename Name of excel file to generate (...xls)
          */
-        public function generateXML ($filename = 'excel-export')
-        {
-                // correct/validate filename
-                $filename = preg_replace('/[^aA-zZ0-9\_\-]/', '', $filename);
-    	
-                // deliver header (as recommended in php manual)
-                header("Content-Type: application/vnd.ms-excel; charset=" . $this->sEncoding);
-                header("Content-Disposition: inline; filename=\"" . $filename . ".xls\"");
+        public function generateXML ($filename = 'excel-export') {
+          // print out document to the browser
+          // need to use stripslashes for the damn ">"
+          $output = stripslashes (sprintf($this->header, $this->sEncoding));
+          $output .= "\n<Worksheet ss:Name=\"" . $this->sWorksheetTitle . "\">\n<Table>\n";
+          foreach ($this->lines as $line)
+                  $output .= $line;
 
-                // print out document to the browser
-                // need to use stripslashes for the damn ">"
-                echo stripslashes (sprintf($this->header, $this->sEncoding));
-                echo "\n<Worksheet ss:Name=\"" . $this->sWorksheetTitle . "\">\n<Table>\n";
-                foreach ($this->lines as $line)
-                        echo $line;
+          $output .= "</Table>\n</Worksheet>\n";
+          $output .= $this->footer;
 
-                echo "</Table>\n</Worksheet>\n";
-                echo $this->footer;
+          return array('contents' => $output, 'encoding' => $this->sEncoding);
         }
 
 }
