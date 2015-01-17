@@ -9,28 +9,40 @@ function uc_csv_drush_command() {
     'description' => dt('Run an export and place the exported file in the specified location, or in the same place where the command is called if unspecified.'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
     'arguments' => array(
-      'of' => dt('The relative path and file name to where you want the export file placed.'),
+      'output-file' => dt('The relative path and file name to where you want the export file placed.'),
     ),
     'options' => array(
-      'sd' => array(
+      'start' => array(
         'description' => dt('The start date of when the export should take place (yyyy-mm-dd)'),
         'example-value' => '2014-10-01',
       ),
-      'ed' => array(
+      'end' => array(
         'description' => dt('The end date of when the export should end (yyyy-mm-dd)'),
         'example-value' => '2014-10-31',
       ),
-      'ie' => array(
-        'description' => dt('Ignore state of previously exported entries (export all)'),
-        'example-value' => 'true',
+      'shipping-address' => array(
+        'description' => dt('Include the shipping address.'),
+      ),
+      'billing-address' => array(
+        'description' => dt('Include the billing address.'),
+      ),
+      'products' => array(
+        'description' => dt('Include the products.'),
+      ),
+      'file-type' => array(
+        'description' => dt('Export type (defaults to csv).'),  
+      ),
+      'order-by' => array(
+        'description' => dt('How to order the report (defaults to order-id).'),
+        'example-value' => 'order-id or last-name',
       ),
       'email' => array(
         'description' => dt('Optional: The email address to send the finished report to.'),
         'example-value' => '--email=test@testing.com',
       ),
       'examples' => array(
-        'uc-csv-export export_file.csv --sd=2014-10-01 --ed=2014-10-31 --ie=true',
-        'uc-csv-export --sd=2014-10-01 --ed=2014-10-31 --ie=true --email=test@testing.com',
+        'Export With Dates' => 'uc-csv-export export_file.csv --sd=2014-10-01 --ed=2014-10-31',
+        'Export With Dates/Email' => 'uc-csv-export --sd=2014-10-01 --ed=2014-10-31--email=test@testing.com',
       ),
       'aliases' => array('ucce'),  
     ),
@@ -43,8 +55,15 @@ function uc_csv_drush_command() {
       'of' => dt('The relative path and file name to where you want the export file placed.'),
       'id' => dt('The machine ID of the report to be generated'),
     ),
+    'options' => array(
+      'ignore' => array(
+        'description' => dt('Ignore state of previously exported entries (export all)'),
+        'example-value' => 'true',
+      ),
+    ),
     'examples' => array(
       'export report 1' => 'uc-csv-export-report export_file.csv 1',
+      'export report 1 ignore tracking' => 'uc-csv-export-report export_file.csv 1 --ignore=true',
     ),
     'aliases' => array('ucer'),  
   );
@@ -57,14 +76,15 @@ function uc_csv_drush_command() {
  */
 function drush_uc_csv_uc_csv_export_validate($of = NULL) {
   // check to make sure we have been provided a proper output file for dumping our
-  // export to
-  if (empty($of)) {
+  // export to. This setting can be ignored if we are emailing a file
+  $email = drush_get_option('email');
+  if (empty($of) && empty($email)) {
     drush_set_error(dt('You did not specify a file name and location for your export file.'));
   }
   
   // check the dates to make sure they are in the proper format
-  $start_date = drush_get_option('sd');
-  $end_date = drush_get_option('ed');
+  $start_date = drush_get_option('start-date');
+  $end_date = drush_get_option('end-date');
   if (!empty($start_date) && strlen($start_date) != 10) {
     drush_set_error(dt('Your start date is not the proper length to be valid.'));
   }
@@ -93,18 +113,33 @@ function drush_uc_csv_uc_csv_export_validate($of = NULL) {
 function drush_uc_csv_export($of = NULL) {
   $form = $form_state = array();
 
+  // Convert order-by into our legacy options so we don't have to re-write our schema
+  $order_by = drush_get_option('order-by');
+  $order_by ($order_by != 'order-id' && $order_by != 'last-name') ? 'orderid' : $order_by;
+  if ($order_by == 'last-name') {
+    $order_by = 'last_name';
+  }
+  elseif ($order_by == 'order-id') {
+    $order_by = 'orderid';
+  }
+  
+  // Sanity check on the file type, defaulting to csv if all else fails
+  $file_type = drush_get_option('file-type');
+  $file_type ($file_type != 'csv' && $file_type != 'xls') ? 'csv' : $file_type;
+
   // Simulate a report by generating the report object used by the creation process.
   // TODO: make all currently assigned items (save track) selectable as options in
   // the command line.
   $report = new stdClass();
   $report->volatile = TRUE;
-  $report->shipping_address = TRUE;
-  $report->billing_address = TRUE;
-  $report->products = TRUE;
+  $report->shipping_address = drush_get_option('shipping-address');
+  $report->billing_address = drush_get_option('billing-address');
+  $report->products = drush_get_option('products');
   $report->track = FALSE;
-  $report->start_date = drush_get_option('sd');
-  $report->end_date = drush_get_option('ed');
-  $report->file_type = 'csv';
+  $report->start_date = drush_get_option('start-date');
+  $report->end_date = drush_get_option('end-date');
+  $report->file_type = $file_type;
+  $report->order_by = $order_by;
   $report->report_name = (!empty($of)) ? $of : 'exported_report';
   $report->email_address = drush_get_option('email');
   $report->email_enable = (!empty($report->email_address)) ? TRUE : FALSE; 

@@ -1,29 +1,39 @@
 <?php
 
 /**
- * implementation of hook_menu();
+ * Implements hook_menu
  */
 function uc_csv_menu() {
   $items = array();
   $items['admin/store/export'] = array(
-    'title' => 'CSV Export',
-    'description' => t('Export all orders as a CSV file'),
-    'page callback' => 'uc_csv_report_grid',
+    'title' => t('CSV Export'),
+    'description' => t('Export Settings'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('uc_csv_settings'),
     'access callback' => 'uc_csv_both_perms',
-    'access arguments' => array(''),
     'type' => MENU_NORMAL_ITEM,
+    'weight' => -1,
   );
   $items['admin/store/export/index'] = array(
-    'title' => 'Export Report Settings',
+    'title' => t('Export Report Settings'),
     'description' => t('Set up the reports you want to export.'),
     'page callback' => 'uc_csv_report_grid',
     'access callback' => 'user_access',
     'access arguments' => array('administer ubercart csv export settings'),
     'weight' => -25,
-    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/store/export/settings'] = array(
+    'title' => t('Settings'),
+    'description' => t('Export Settings'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('uc_csv_settings'),
+    'access callback' => 'uc_csv_both_perms',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => -30,
   );
   $items['admin/store/export/create'] = array(
-    'title' => 'Create New Report',
+    'title' => t('Create New Report'),
     'description' => t('Add a new export report.'),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('uc_csv_add_new_report'),
@@ -33,17 +43,16 @@ function uc_csv_menu() {
     'type' => MENU_LOCAL_TASK,
   );
   $items['admin/store/export/execute'] = array(
-    'title' => 'Export Report',
+    'title' => t('Export Report'),
     'description' => t('Select report to export.'),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('uc_csv_select_report_to_export'),
     'access callback' => 'uc_csv_both_perms',
-    'access arguments' => array(''),
     'weight' => -15,
     'type' => MENU_LOCAL_TASK,
   );
   $items['admin/store/export/reports/update/%uc_csv_report_id'] = array(
-    'title' => 'Update Report',
+    'title' => t('Update Report'),
     'description' => t('Update an existing report'),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('uc_csv_add_new_report',5),
@@ -52,7 +61,7 @@ function uc_csv_menu() {
     'type' => MENU_CALLBACK,
   );
   $items['admin/store/export/reports/delete/%uc_csv_report_id'] = array(
-    'title' => 'Delete Report',
+    'title' => t('Delete Report'),
     'description' => t('Delete an existing export report.'),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('uc_csv_delete_report',5),
@@ -65,7 +74,8 @@ function uc_csv_menu() {
 }
 
 /**
- * uc_csv_both_perms() 
+ * Permissions callback
+ * 
  * allow access if one of either the permissions are checked for a user
  */
 function uc_csv_both_perms() {
@@ -73,7 +83,7 @@ function uc_csv_both_perms() {
 }
 
 /**
- * implementation of hook_perm();
+ * Implements hook_perm
  */
 function uc_csv_permission() {
   return array(
@@ -87,7 +97,9 @@ function uc_csv_permission() {
 }
 
 /**
- * implementation of hook_load()
+ * Load arguments from URL
+ * 
+ * If they are valid return a valid report object with all the trimmings.
  */
 function uc_csv_report_id_load($id)  {
   if (is_numeric($id)) {
@@ -103,6 +115,58 @@ function uc_csv_report_id_load($id)  {
   } 
   else {
     return FALSE;
+  }
+}
+
+/**
+ * Settings form
+ *
+ * Controls cron functionality
+ */
+function uc_csv_settings($form, &$form_state) {
+  $form['uc_csv_enable_cron'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Enable cron tasks when cron job is run.'),
+    '#description' => t('Check this if you want the reports to export when crons are run on the intervals below.'),
+    '#default_value' => variable_get('uc_csv_enable_cron', FALSE),
+  );
+  $form['uc_csv_report_interval'] = array(
+    '#type' => 'select',
+    '#title' => t('Report export intervals'),
+    '#description' => t('If cron is enabled, the reports will be exported at the following intervals.'),
+    '#default_value' => variable_get('uc_csv_report_interval', 86400),
+    '#options' => array(
+      '3600' => t('Hourly'),
+      '10800' => t('Every Three Hours'),
+      '21600' => t('Every Six Hours'),
+      '43200' => t('Every Twelve Hours'),
+      '86400' => t('Once per day'),
+    ),
+  );
+  return system_settings_form($form);
+}
+
+/**
+ * Implements hook_cron
+ */
+function uc_csv_cron() {
+  // If this is the first time we're running, then we need to init 
+  if (variable_get('uc_csv_report_last_export', 0) == 0) {
+     variable_set('uc_csv_report_last_export', time() - 3600);
+  }
+  // If we're configured to run the cron, then run only the ones where emails are
+  // generated because nobody will be there to catch any of the others
+  if (variable_get('uc_csv_enable_cron', FALSE) == 1) {
+    // If we are past our interval, run and re-set the time
+    if (variable_get('uc_csv_report_last_export', 0) < (time() - variable_get('uc_csv_report_interval', 86400))) {
+      $result = db_query("SELECT * FROM {uc_csv_reports} WHERE email_enable=:email_enable", array(':email_enable' => 1));
+      while ($report = $result->fetchObject()) {
+        $form = array();
+        $form_state['values']['rid'] = $report->rid;
+        uc_csv_select_report_to_export_submit($form, $form_state, FALSE, NULL);
+      }
+      variable_set('uc_csv_report_last_export', time());
+    }
   }
 }
 
@@ -131,10 +195,10 @@ function uc_csv_report_grid()  {
 
     $row = array();
     $row[] = $data->report_name;    
-    $row[] = array('data'=>$data->last_exported,'style'=>'text-align: center;'); 
-    $row[] = array('data'=>$data->last_order_id,'style'=>'text-align: center;'); 
-    $row[] = array('data'=>l(t('Edit'), 'admin/store/export/reports/update/' . $data->rid) . ' | ' .
-             l(t('Delete'), 'admin/store/export/reports/delete/' . $data->rid),'style'=>'text-align: center;'); 
+    $row[] = array('data' => $data->last_exported,'style'=>'text-align: center;'); 
+    $row[] = array('data' => $data->last_order_id,'style'=>'text-align: center;'); 
+    $row[] = array('data' => l(t('Edit'), 'admin/store/export/reports/update/' . $data->rid) . ' | ' .
+                             l(t('Delete'), 'admin/store/export/reports/delete/' . $data->rid), 'style' => 'text-align: center;'); 
     $rows[] = $row;
   }
   
@@ -149,143 +213,28 @@ function uc_csv_report_grid()  {
   return $output;
 }
 
-function uc_csv_select_report_to_export_submit($form,$form_state)  {
-  $result = db_query("SELECT * FROM {uc_csv_reports} WHERE rid=:rid;",array(':rid' => $form_state['values']['rid']));
-  $report = $result->fetchObject();
+/**
+ * Put together an export based on the report id
+ *
+ * This does the heavy lifting of the report generation
+ */
+function uc_csv_select_report_to_export_submit($form, &$form_state, $report = NULL)  {
+  global $language;
 
-  $statuses = array();
-  foreach(unserialize($report->statuses) as $key=>$value) {
-    if ($value != '0') {
-      $statuses[] = $value;
-    }
-  }
-
-  $selects = array();
-  $country = array();
-  $zone = array();
-  $headers = array( 'order_id','last_name','first_name','email_address','order_total','product_count');
-  
-  /* cache the list of countries and states in memory so we don't have to do repeated lookups */
-  $result = db_query("SELECT country_id,country_name FROM {uc_countries}");
-  while($sdata = $result->fetchObject()) {
-    $country[$sdata->country_id] = $sdata->country_name;
-  }
-
-  $result = db_query("SELECT zone_id,zone_code FROM {uc_zones}");
-  while($sdata = $result->fetchObject()) {
-    $zone[$sdata->zone_id] = $sdata->zone_code;
+  // If we are not being passed a drush report object, then look up the object we're using
+  if (empty($report)) {
+    $result = db_query("SELECT * FROM {uc_csv_reports} WHERE rid=:rid;",array(':rid' => $form_state['values']['rid']));
+    $report = $result->fetchObject();
+    // These kinds of reports are not volatile - only ones created on the fly using drush
+    $report->volatile = FALSE;
   }
   
-  if ( $report->shipping_address == 1 ) {
-    $selects[] = 'o.delivery_first_name,o.delivery_last_name,o.delivery_phone,o.delivery_company,o.delivery_street1,o.delivery_street2,o.delivery_city,o.delivery_zone,o.delivery_postal_code,o.delivery_country';
-    $headers = array_merge($headers,array('shipping_first_name','shipping_last_name','shipping_phone','shipping_company','shipping_street1','shipping_street2',
-                               'shipping_city','shipping_state','shipping_zipcode','shipping_country'));
-  }
-  
-  if ( $report->billing_address == 1 ) {
-    $selects[] = 'o.billing_phone,o.billing_company,o.billing_street1,o.billing_street2,o.billing_city,o.billing_zone,o.billing_postal_code,o.billing_country';
-	$headers = array_merge($headers,array('billing_phone','billing_company','billing_street1','billing_street2',
-                               'billing_city','billing_state','billing_zipcode','billing_country'));
-  }
-  
-  if ( $report->products == 1 ) {
-    $headers = array_merge($headers,array('products','tax','shipping'));
-  }
-
-  if ( $report->orderby == 'orderid' ) {
-    $orderby = 'o.order_id ASC';
-  } 
-  elseif ( $report->orderby == 'last_name' ) { 
-    $orderby = 'o.billing_last_name ASC';
-  } 
-  else {
-    $orderby = 'o.order_id ASC, o.billing_last_name ASC';
-  }
-  
-  if (count($selects) > 0) {
-    $sel = ','.join(',',$selects);
-  } 
-  else {
-    $sel = NULL;
-  }
-
-  /* reports may have been trackable at one time and then switched to non-trackable. as such we */
-  /* need to track the state of the report. if it is not trackable, then set last_order_id to */
-  /* 0 so that we get all the orders */
-  if ($report->track < 1) {
-    $report->last_order_id = 0;
-  }
-
-  $complete_order = array();
-  $result = db_query("SELECT o.order_id, o.billing_last_name, o.billing_first_name, o.primary_email,o.order_total, o.product_count".$sel."
-                      FROM {uc_orders} o
-                      WHERE o.order_id > :order_id && o.order_status IN ('".join("','",$statuses)."')
-                      ORDER BY ".$orderby,array(':order_id' => $report->last_order_id));
-  while($order = $result->fetchObject())  {
-    /* only deal with the billing stuff if it was selected as part of our order configuration */
-    if ( $report->shipping_address == 1 ) {
-      $order->delivery_zone = $zone[$order->delivery_zone];
-      $order->delivery_country = $country[$order->delivery_country];
-    }
-    
-    /* only deal with the billing stuff if it was selected as part of our order configuration */
-    if ( $report->billing_address == 1 ) {
-      $order->billing_zone = $zone[$order->billing_zone];
-      $order->billing_country = $country[$order->billing_country];
-    }
-    
-    if ($report->products == 1) {
-      $product = NULL;
-      $calc_attribute = array();
-      $presults = db_query("SELECT model,title,qty,price,data 
-                            FROM {uc_order_products} 
-                            WHERE order_id=:order_id",array(':order_id' => $order->order_id));
-      while($pdata = $presults->fetchObject()) {
-        $data = unserialize($pdata->data);
-        if (isset($data['attributes']) && is_array($data['attributes'])) {
-          foreach($data['attributes'] as $key=>$attribute) {
-            foreach($attribute as $display_attribute) {
-              $calc_attribute[] = $key.": ".$display_attribute; 
-            }
-          }
-        }
-        if (count($calc_attribute)>0) {
-          $title = $pdata->title . " - ".join(',',$calc_attribute);
-        } 
-        else {
-          $title = $pdata->title;
-        }
-        $product .= $pdata->qty.' - '.$title.' ('.$pdata->model.'): $'.number_format($pdata->price,2).'ea.';
-      }
-      $order->products = $product;
-    
-      /* now we need to get the shipping and sales tax data for this order */
-      /* we will do this in two queries for now - first we do tax */
-      $stResult = db_query("SELECT amount AS sales_tax
-                            FROM {uc_order_line_items}
-                            WHERE order_id = :order_id
-                              AND type=:type",array(':order_id' => $order->order_id, ':type' => 'tax'));
-      $stdata = $stResult->fetchObject();
-      if (isset($stdata->sales_tax)) {
-        $order->sales_tax = $stdata->sales_tax;
-      }
-      
-      /* use the same sort of query to get the shipping amount */
-      $stResult = db_query("SELECT amount AS shipping
-                            FROM {uc_order_line_items}
-                            WHERE order_id = :order_id
-                              AND type=:type",array(':order_id' => $order->order_id,':type' => 'shipping'));
-      $stdata = $stResult->fetchObject();
-      if (isset($stdata->shipping)) {
-        $order->shipping = $stdata->shipping;
-      } 
-    }
-    $complete_order[] = (array)$order;
-  }
+  // Generate the report
+  $order = uc_csv_generate_report($report);
     
   /* update the table with our latest export time and order_id so we don't re-export things on */
   /* the next go-around - but only do this if it is a trackable report */
-  if ($report->track > 0) {
+  if (!empty($report->track) && empty($report->volatile)) {
     /* get the max order id for storage */
     $result = db_query('SELECT MAX(order_id) AS order_id FROM {uc_orders}');
     $odata = $result->fetchObject();
@@ -294,53 +243,127 @@ function uc_csv_select_report_to_export_submit($form,$form_state)  {
     /* insert the max id into our report table */
     $result = db_query("UPDATE {uc_csv_reports} 
                         SET last_order_id=:last_order_id, last_exported=:last_exported
-                        WHERE rid=:rid;",array(':last_order_id' => $max_order,':last_exported' => date('Y-m-d H:i:s',time()),
-                                               ':rid' => $form_state['values']['rid']));
+                        WHERE rid=:rid;", array(':last_order_id' => $max_order, ':last_exported' => date('Y-m-d H:i:s', time()),
+                                                ':rid' => $form_state['values']['rid']));
   }
   
   /* name the report file name after the given name for this report, just make it filename friendly */
   $file_name = uc_csv_clean_filename($report->report_name);
+  $file_name = ($report->file_type) ? $file_name . '.csv' : $file_name . ".xls";
   
-  /* if we are reporting as a csv, then use standard csv export. to do multi-byte reports, then use */
-  /* the Microsoft excel XML export method */
-  if ($report->file_type == 'csv') {
-    /* output the file so we download */
-    header('Content-Type: text/x-csv'); 
-    header('Expires: '. gmdate('D, d M Y H:i:s') .' GMT');
-    header('Content-Disposition: inline; filename="'.$file_name.'.csv"');
-    header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-    header('Pragma: public');
+  // If we are emailing the report, we do not need to save a copy of the report.
+  if (!empty($report->email_enable)) {
+    $contents = _uc_csv_prepare_report($report, $order);
     
-    print join(",",$headers)."\n";
-    $source = NULL;
-    foreach($complete_order as $order) {
-      foreach ($order as $cell) {
-        $source .= '"'.$cell.'",';
+    // Send the email to the person configured in the report
+    $from = variable_get('site_mail', ini_get('sendmail_from'));
+    $site_name = variable_get('site_name');
+    $boundary = md5(time());
+    $mime_boundary = "==Multipart_Boundary_x{$boundary}x"; 
+    $email_content = theme('uc_csv_attached_report', array('report' => $report, 'boundary' => $mime_boundary, 'contents' => $contents, 'filename' => $file_name, 'filesize' => strlen($contents)));
+  
+    $params = array(
+      'body' => $email_content,
+      'subject' => t('Ubercart Export Report: ') . $report->report_name . ' on ' . date('m/d/Y'),
+      'boundary' => $mime_boundary,
+    );
+    $result = drupal_mail('uc_csv', 'uc_csv_key', $report->email_address, $language, $params, $from, TRUE);
+
+    // If drush and cron are not running, then we are manually exporting and need to set
+    // a drupal message to let the user know we ran successfully
+    if (!drupal_is_cli() || !function_exists('drush_main')) {
+      if (!_uc_csv_is_cron_running()) {
+        drupal_set_message(t('Ubercart Export Report: ') . $report->report_name . ' on ' . date('m/d/Y') . ' ' . t('sent'));
       }
+    }
+    else {
+      drush_log(dt('Ubercart Export Report: ') . $report->report_name . ' on ' . date('m/d/Y') . ' ' . dt('sent'), 'ok');
+    }
+  }
+  else {
+    $contents = _uc_csv_prepare_report($report, $order);
+    
+    // If we are coming from a drush command, we need to return the contents of the file
+    // to the calling function for handling
+    if (drupal_is_cli() && function_exists('drush_main')) {
+      return array(
+        'contents' => $contents,
+        'report' => $report,
+      );
+    }
+      
+    /* if we are reporting as a csv, then use standard csv export. to do multi-byte reports, then use */
+    /* the Microsoft excel XML export method */
+    if ($report->file_type == 'csv') {
+      /* output the file so we download */
+      header('Content-Type: text/x-csv'); 
+      header('Expires: '. gmdate('D, d M Y H:i:s') .' GMT');
+      header('Content-Disposition: inline; filename="' . $file_name . '"');
+      header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+      header('Pragma: public');
+      echo $contents;
+      exit();
+    }
+    else {
+      $encoding = $contents['encoding'];
+      $contents = $contents['contents'];
+      header("Content-Type: application/vnd.ms-excel; charset=" . $encoding);
+      header('Content-Disposition: inline; filename="' . $file_name . '"');
+      echo $contents;
+      exit();
+    }
+  }
+}
+
+/**
+ * Prepare the report
+ * 
+ * Prepare the report regardless if we're preparing a csv or XLS report
+ */
+function _uc_csv_prepare_report($report, $order) {
+  if ($report->file_type == 'csv') {
+    $headers = implode(',', $order['headers']) . "\n";
+    $source = NULL;
+    foreach ($order['order_data'] as $order) {
+      $csv_array = array();
+      foreach ($order as $cell) {
+        $csv_array[] = $cell;
+      }
+      
+      // We need to make sure the lines are properly escaped. 
+      // from comments at: http://php.net/manual/en/function.fputcsv.php
+      $csv = fopen('php://temp/maxmemory:'. (1*1024*1024), 'r+');
+      fputcsv($csv, $csv_array);
+      rewind($csv);
+      $source = stream_get_contents($csv);
+      fclose($csv);
       $source .= "\n";
     }
-    echo $source;
-    exit();
+    return $headers . $source;
   } elseif ($report->file_type == 'xls') {
-    module_load_include('inc','uc_csv','inc/excel-export');
+    module_load_include('inc', 'uc_csv', 'inc/excel-export');
     // generate file (constructor parameters are optional)
-    $xls = new Excel_XML('UTF-8', false, $report->report_name);
-    $data = array($headers);
-    foreach($complete_order as $line) {
+    $xls = new Excel_XML('UTF-8', FALSE, $report->report_name);
+    $data = array($order['headers']);
+    foreach ($order['order_data'] as $line) {
       $set = array();
-      foreach($line as $key => $value) {
+      foreach ($line as $key => $value) {
         $set[] = $value;
       }
       $data[] = $set;
     }
     $xls->addArray($data);
-    $xls->generateXML($file_name);
-    exit();
-  } else {
-    drupal_goto('admin/store/export');
-  }
+    $contents = $xls->generateXML;
+    return $contents;
+  } 
+  return FALSE;
 }
 
+/**
+ * Add new reports
+ *
+ * Interface for adding a new report or editing an existing one
+ */
 function uc_csv_add_new_report($form, &$form_state) {
   $report = $form_state['build_info']['args'];
   /* if we are creating a new report, then the args will be empty and we will need to initialize */
@@ -349,7 +372,7 @@ function uc_csv_add_new_report($form, &$form_state) {
     $report = new stdClass();
     $report->rid = $report->report_name = $report->shipping_address = NULL;
     $report->billing_address = $report->products = $report->orderby = NULL;
-    $report->track = $report->file_type = NULL;
+    $report->track = $report->file_type = $report->email_enable = $report->email_address = NULL;
   } 
   else {
     $report = $report[0];
@@ -373,9 +396,15 @@ function uc_csv_add_new_report($form, &$form_state) {
     '#weight' => 3,
     '#collapsible' => TRUE,
   );
+  $form['email'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Email Options'),
+    '#weight' => 4,
+    '#collapsible' => TRUE,
+  );
   $form['other'] = array(
     '#type' => 'fieldset',
-    '#title' => t('Other Options'),
+    '#title' => t('Report Email Options'),
     '#weight' => 4,
     '#collapsible' => TRUE,
   );
@@ -434,6 +463,17 @@ function uc_csv_add_new_report($form, &$form_state) {
     '#options' => $statuses,
   	'#description' => t('Select the order statuses to be exported in this report.'),
   );
+  $form['email']['email_enable'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Check if you would like to have generated reports emailed as opposed to downloaded on generation.'),
+    '#description' => t('This is especially useful for when you have cron or drush generated emails that you do not want to have to deal with retrieving. Emails will be sent to the email address configured in this report.'),
+    '#default_value' => $report->email_enable,
+  );
+  $form['email']['email_address'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Email address where you wish the report to be send to.'),
+    '#default_value' => $report->email_address,
+  );
   $form['other']['orderby'] = array(
     '#type' => 'select',
     '#title' => t('Order By'),
@@ -472,40 +512,49 @@ function uc_csv_add_new_report($form, &$form_state) {
   return $form;
 }
 
+/** 
+ * Submit handler for creating a new report
+ *
+ * take our form data and submit a new report to the database
+ */
 function uc_csv_add_new_report_submit($form,$form_state) {
-  $shipping = ( $form_state['values']['options']['shipping'] ) ? 1 : 0;
-  $billing = ( $form_state['values']['options']['billing'] ) ? 1 : 0;
-  $products = ( $form_state['values']['options']['products'] ) ? 1 : 0;
+  $shipping = ($form_state['values']['options']['shipping']) ? 1 : 0;
+  $billing = ($form_state['values']['options']['billing']) ? 1 : 0;
+  $products = ($form_state['values']['options']['products']) ? 1 : 0;
   
-  if ( $form_state['values']['rid'] > 0 ) {
-    $array = array(
-      'rid' => $form_state['values']['rid'],
-      'report_name' => $form_state['values']['report_name'],
-      'shipping_address' => $shipping,
-      'billing_address' => $billing,
-      'products' => $products,
-      'orderby' => $form_state['values']['orderby'],
-      'file_type' => $form_state['values']['file_type'],
-      'statuses' => serialize($form_state['values']['statuses']),
-      'track' => $form_state['values']['track'],
-    );
-    $result = drupal_write_record('uc_csv_reports',$array,'rid');
-  } 
-  else {
-    $array = array(
-      'report_name' => $form_state['values']['report_name'],
+  // This is data that is applicable whether we are updating or creatting a new record.
+  $rdata = array(
+    'report_name' => $form_state['values']['report_name'],
+    'shipping_address' => $shipping,
+    'billing_address' => $billing,
+    'products' => $products,
+    'orderby' => $form_state['values']['orderby'],
+    'file_type' => $form_state['values']['file_type'],
+    'statuses' => serialize($form_state['values']['statuses']),
+    'track' => $form_state['values']['track'],
+    'email_enable' => $form_state['values']['email_enable'],
+    'email_address' => $form_state['values']['email_address']
+  );
+
+  // If we are creating a new report, then we want to make sure we initizlize our last
+  // exported date and order id for tracking purposes
+  if (empty($form_state['values']['rid'])) {
+    $extra = array(
       'last_exported' => date('Y-m-d H:i:s'),
       'last_order_id' => 0,
-      'shipping_address' => $shipping,
-      'billing_address' => $billing,
-      'products' => $products,
-      'orderby' => $form_state['values']['orderby'],
-      'file_type' => $form_state['values']['file_type'],
-      'statuses' => serialize($form_state['values']['statuses']),
-      'track' => $form_state['values']['track'],
     );
-    $result = drupal_write_record('uc_csv_reports',$array);
+    $wdata = array_merge($rdata, $extra);
+    $result = drupal_write_record('uc_csv_reports', $wdata);
+  } 
+  else {
+    // Otherwise, we have a report, so populate the report id
+    $extra = array(
+      'rid' => $form_state['values']['rid'],
+    );
+    $wdata = array_merge($rdata, $extra);
+    $result = drupal_write_record('uc_csv_reports', $wdata, 'rid');
   }
+
   if ($result == TRUE) {
     drupal_set_message("Report successfully saved");
   } 
@@ -515,6 +564,11 @@ function uc_csv_add_new_report_submit($form,$form_state) {
   drupal_goto('admin/store/export/reports');
 }
 
+/**
+ * Select Report To Export
+ *
+ * This is a rudimentary UI to export the latest data
+ */
 function uc_csv_select_report_to_export($form_state) {
   $options = array();
   $reports = FALSE;
@@ -542,38 +596,15 @@ function uc_csv_select_report_to_export($form_state) {
   }
 }
 
+/**
+ * Delete a report
+ *
+ * Useful for removing reports that are no longer needed
+ */
 function uc_csv_delete_report($form_state, $report) {
   $form = array();
   $form['rid'] = array('#type' => 'hidden', '#value' => $report->rid);
   $form['report_name'] = array('#type' => 'hidden', '#value' => $report->report_name);
-  return confirm_form( $form,
-                       t('Are you sure you wish to delete the %report export report?', array('%report' => $report->report_name)),
-                       'admin/store/export/index',
-                       t('This action cannot be undone.'),
-                       t('Delete'),
-                       t('Cancel')
-                     );
-}
-
-function uc_csv_delete_report_submit($form, $form_state) {
-  db_query("DELETE FROM {uc_csv_reports} WHERE rid=:rid", array(':rid' => (int)$form_state['values']['rid']));
-  drupal_set_message(t('%report report successfully deleted', array('%report' => $form_state['values']['report_name'])));
-  drupal_goto('admin/store/export/index');
-}
-
-function uc_csv_clean_filename($str, $replace = array(), $delimiter = '-') {
-  setlocale(LC_ALL, 'en_US.UTF8');
-  if( !empty($replace) ) {
-    $str = str_replace((array)$replace, ' ', $str);
-  }
-
-  $clean = iconv('UTF-8', 'ASCII//TRANSLIT', $str);
-  $clean = preg_replace("/[^a-zA-Z0-9\/_|+ -]/", '', $clean);
-  $clean = strtolower(trim($clean, '-'));
-  $clean = preg_replace("/[\/_|+ -]+/", $delimiter, $clean);
-  return $clean;
-}
-e'] = array('#type' => 'hidden', '#value' => $report->report_name);
   return confirm_form( $form,
                        t('Are you sure you wish to delete the %report export report?', array('%report' => $report->report_name)),
                        'admin/store/export/index',
@@ -669,7 +700,7 @@ function uc_csv_generate_report($report) {
   }
   
   if ($report->products == 1) {
-    $headers = array_merge($headers, array('products', 'tax', 'shipping'));
+    $headers = array_merge($headers, array('products', 'tax', 'shipping', 'weight'));
   }
 
   if ($report->orderby == 'orderid') {
@@ -700,7 +731,7 @@ function uc_csv_generate_report($report) {
   $result = db_query("SELECT o.order_id, o.billing_last_name, o.billing_first_name, o.primary_email,o.order_total, o.product_count" . $sel . "
                       FROM {uc_orders} o
                       WHERE o.order_id > :order_id && o.order_status IN ('" . join("','", $statuses) . "') " . $date_range . "
-                      ORDER BY ".$orderby,array(':order_id' => $report->last_order_id));  
+                      ORDER BY ".$orderby, array(':order_id' => $report->last_order_id));  
   while($order = $result->fetchObject())  {
     /* only deal with the billing stuff if it was selected as part of our order configuration */
     if ( $report->shipping_address == 1 ) {
@@ -717,10 +748,12 @@ function uc_csv_generate_report($report) {
     if ($report->products == 1) {
       $product = NULL;
       $calc_attribute = array();
-      $presults = db_query("SELECT model,title,qty,price,data 
+      $total_weight = 0;
+      $presults = db_query("SELECT model, title, qty, price, data, weight
                             FROM {uc_order_products} 
                             WHERE order_id=:order_id", array(':order_id' => $order->order_id));
       while($pdata = $presults->fetchObject()) {
+        $total_weight += $pdata->weight;
         $data = unserialize($pdata->data);
         if (isset($data['attributes']) && is_array($data['attributes'])) {
           foreach($data['attributes'] as $key=>$attribute) {
@@ -755,6 +788,9 @@ function uc_csv_generate_report($report) {
                               AND type=:type",array(':order_id' => $order->order_id,':type' => 'shipping'));
       $stdata = $stResult->fetchObject();
       $order->shipping = (isset($stdata->shipping)) ? $stdata->shipping : "N/A";
+      
+      // Assign our total weight
+      $order->weight = $total_weight;
     }
     $complete_order[] = (array)$order;
   }
@@ -821,6 +857,10 @@ function uc_csv_theme($existing, $type, $theme, $path) {
       'template' => 'uc-csv-attached-report',
       'arguments' => array('report' => NULL, 'boundary' => NULL, 'contents' => NULL, 'filename' => NULL, 'filesize' => NULL),
     ),
+    'uc_csv_help_page' => array(
+      'template' => 'uc-csv-help-page',
+      'arguments' => array('create_new_report' => NULL),
+    ),
   );
 }
 
@@ -834,5 +874,19 @@ function _uc_csv_is_cron_running() {
   else {
     lock_release('cron');
     return FALSE;
+  }
+}
+
+/**
+ * Implements hook_help
+ */
+function uc_csv_help($path, $args) {
+  switch ($path) {
+    case 'admin/help#uc_csv':
+      // Define variables that will be used in our help file but only if we are going
+      // to the main help page.
+      $create_new_report = l('Create New Report', 'admin/store/export/create');
+      return theme('uc_csv_help_page', array('create_new_report' => $create_new_report));
+      break;
   }
 }

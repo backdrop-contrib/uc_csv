@@ -6,7 +6,7 @@
  */
 
 /**
- * Implementation of hook_schema()
+ * Implements of hook_schema
  */
 function uc_csv_schema() {
   $schema['uc_csv_reports'] = array(
@@ -67,6 +67,16 @@ function uc_csv_schema() {
         'type' => 'int',
         'length' => 1,
         'not null' => TRUE),
+      'email_enable' => array(
+        'description' => 'Are we emailing this report when generated',
+        'type' => 'int',
+        'length' => 1,
+        'not null' => TRUE),
+      'email_address' => array(
+        'description' => 'Email address to send report to.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE),
      ),
     'primary key' => array('rid'),
   );
@@ -95,23 +105,6 @@ function uc_csv_update_7204() {
     'length' => 1,
     'not null' => TRUE,
     'default' => '1'));
-}
-
-/**
- * Add a status field. These are order statuses to be included in report exports.
- */
-function uc_csv_update_7205() {
-  db_add_field('uc_csv_reports','statuses',
-    array(
-      'description' => 'The order statuses to be included in this report',
-      'type' => 'text',
-      'not null' => TRUE,
-      'size' => 'medium',
-    )
-  );
-}
-
-));
 }
 
 /**
