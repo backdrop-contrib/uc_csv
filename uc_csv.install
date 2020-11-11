@@ -27,7 +27,7 @@ function uc_csv_schema() {
       'last_exported' => array(
         'description' => 'The date of the last export',
         'mysql_type' => 'datetime',
-        'type' => NULL,
+        'type' => 'datetime',
       ),
       'last_order_id' => array(
         'description' => 'The last order id exported',
@@ -95,18 +95,6 @@ function uc_csv_schema() {
   );
   return $schema;
 }
-
-// TODO The old hook_update_N functions cannot be applied to Backdrop.
-function uc_csv_update_7203() { }
-
-// TODO The old hook_update_N functions cannot be applied to Backdrop.
-function uc_csv_update_7204() { }
-
-// TODO The old hook_update_N functions cannot be applied to Backdrop.
-function uc_csv_update_7205() { }
-
-// TODO The old hook_update_N functions cannot be applied to Backdrop.
-function uc_csv_update_7206() { }
 
 /**
  * Implements hook_update_last_removed().

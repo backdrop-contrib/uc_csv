@@ -359,11 +359,11 @@ function uc_csv_select_report_to_export_submit($form, &$form_state, $report = NU
  *
  * Prepare the report regardless if we're preparing a csv or XLS report
  */
-function _uc_csv_prepare_report($report, $order) {
+function _uc_csv_prepare_report($report, $orders) {
   if ($report->file_type == 'csv') {
-    $headers = implode(',', $order['headers']) . "\n";
+    $headers = implode(',', $orders['headers']) . "\n";
     $source = NULL;
-    foreach ($order['order_data'] as $order) {
+    foreach ($orders['order_data'] as $order) {
       $csv_array = array();
       foreach ($order as $cell) {
         $csv_array[] = $cell;
@@ -374,9 +374,8 @@ function _uc_csv_prepare_report($report, $order) {
       $csv = fopen('php://temp/maxmemory:' . (1 * 1024 * 1024), 'r+');
       fputcsv($csv, $csv_array);
       rewind($csv);
-      $source = stream_get_contents($csv);
+      $source .= stream_get_contents($csv);
       fclose($csv);
-      $source .= "\n";
     }
     return $headers . $source;
   }
@@ -384,8 +383,8 @@ function _uc_csv_prepare_report($report, $order) {
     module_load_include('inc', 'uc_csv', 'inc/excel-export');
     // generate file (constructor parameters are optional)
     $xls = new Excel_XML('UTF-8', FALSE, $report->report_name);
-    $data = array($order['headers']);
-    foreach ($order['order_data'] as $line) {
+    $data = array($orders['headers']);
+    foreach ($orders['order_data'] as $line) {
       $set = array();
       foreach ($line as $key => $value) {
         $set[] = $value;
@@ -791,7 +790,7 @@ function uc_csv_generate_report($report) {
   /* reports may have been trackable at one time and then switched to non-trackable. as such we */
   /* need to track the state of the report. if it is not trackable, then set last_order_id to */
   /* 0 so that we get all the orders */
-  if (isset($report->track) && $report->track < 1) {
+  if (isset($report->track) && intval($report->track) < 1) {
     $report->last_order_id = 0;
   }
 
@@ -863,10 +862,11 @@ function uc_csv_generate_report($report) {
     $complete_order[] = (array) $order;
   }
 
-  return array(
+  $report_data = array(
     'order_data' => $complete_order,
     'headers' => $headers,
   );
+  return $report_data;
 }
 
 /**
