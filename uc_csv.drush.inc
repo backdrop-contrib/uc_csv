@@ -1,13 +1,13 @@
 <?php
 
 /**
- * Implementation of hook_drush_command().
+ * Implements hook_drush_command().
  */
 function uc_csv_drush_command() {
   $items = array();
   $items['uc-csv-export'] = array(
     'description' => dt('Run an export and place the exported file in the specified location, or in the same place where the command is called if unspecified.'),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
+    'bootstrap' => DRUSH_BOOTSTRAP_BACKDROP_FULL,
     'arguments' => array(
       'output-file' => dt('The relative path and file name to where you want the export file placed.'),
     ),
@@ -30,7 +30,7 @@ function uc_csv_drush_command() {
         'description' => dt('Include the products.'),
       ),
       'file-type' => array(
-        'description' => dt('Export type (defaults to csv).'),  
+        'description' => dt('Export type (defaults to csv).'),
       ),
       'order-by' => array(
         'description' => dt('How to order the report (defaults to order-id).'),
@@ -44,13 +44,13 @@ function uc_csv_drush_command() {
         'Export With Dates' => 'uc-csv-export export_file.csv --sd=2014-10-01 --ed=2014-10-31',
         'Export With Dates/Email' => 'uc-csv-export --sd=2014-10-01 --ed=2014-10-31--email=test@testing.com',
       ),
-      'aliases' => array('ucce'),  
+      'aliases' => array('ucce'),
     ),
   );
-  
+
   $items['uc-csv-export-report'] = array(
     'description' => 'Run an export of a specific report (by id)',
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
+    'bootstrap' => DRUSH_BOOTSTRAP_BACKDROP_FULL,
     'arguments' => array(
       'of' => dt('The relative path and file name to where you want the export file placed.'),
       'id' => dt('The machine ID of the report to be generated'),
@@ -65,9 +65,9 @@ function uc_csv_drush_command() {
       'export report 1' => 'uc-csv-export-report export_file.csv 1',
       'export report 1 ignore tracking' => 'uc-csv-export-report export_file.csv 1 --ignore=true',
     ),
-    'aliases' => array('ucer'),  
+    'aliases' => array('ucer'),
   );
-  
+
   return $items;
 }
 
@@ -81,27 +81,27 @@ function drush_uc_csv_uc_csv_export_validate($of = NULL) {
   if (empty($of) && empty($email)) {
     drush_set_error(dt('You did not specify a file name and location for your export file.'));
   }
-  
+
   // check the dates to make sure they are in the proper format
   $start_date = drush_get_option('start-date');
   $end_date = drush_get_option('end-date');
   if (!empty($start_date) && strlen($start_date) != 10) {
     drush_set_error(dt('Your start date is not the proper length to be valid.'));
   }
-  if (!empty($end_date) && strlen($end_date) != 10)  {
+  if (!empty($end_date) && strlen($end_date) != 10) {
     drush_set_error(dt('Your end date is not the proper length to be valid.'));
   }
-  
+
   foreach (array($start_date, $end_date) as $date) {
     list($year, $month, $day) = explode('-', $date);
     if (checkdate($month, $day, $year) === FALSE) {
       drush_set_error(dt('One of your specified dates was invalid. Please double check your date and try again.'));
     }
   }
-  
+
   // Now we generate a report object and get the report
   $report = new stdClass();
-  
+
 }
 
 /**
@@ -115,17 +115,19 @@ function drush_uc_csv_export($of = NULL) {
 
   // Convert order-by into our legacy options so we don't have to re-write our schema
   $order_by = drush_get_option('order-by');
-  $order_by ($order_by != 'order-id' && $order_by != 'last-name') ? 'orderid' : $order_by;
+  $order_by($order_by != 'order-id' && $order_by != 'last-name');
+  $order_by;
   if ($order_by == 'last-name') {
     $order_by = 'last_name';
   }
   elseif ($order_by == 'order-id') {
     $order_by = 'orderid';
   }
-  
+
   // Sanity check on the file type, defaulting to csv if all else fails
   $file_type = drush_get_option('file-type');
-  $file_type ($file_type != 'csv' && $file_type != 'xls') ? 'csv' : $file_type;
+  $file_type($file_type != 'csv' && $file_type != 'xls');
+  $file_type;
 
   // Simulate a report by generating the report object used by the creation process.
   // TODO: make all currently assigned items (save track) selectable as options in
@@ -142,22 +144,22 @@ function drush_uc_csv_export($of = NULL) {
   $report->order_by = $order_by;
   $report->report_name = (!empty($of)) ? $of : 'exported_report';
   $report->email_address = drush_get_option('email');
-  $report->email_enable = (!empty($report->email_address)) ? TRUE : FALSE; 
+  $report->email_enable = (!empty($report->email_address)) ? TRUE : FALSE;
 
   // For now we will assume all statuses are to be exported as part of this report.
   // We may want to make it in the future so you can select which statuses are to
   // be exported, but that could be confusing.
   $result = db_query("SELECT order_status_id
                       FROM {uc_order_statuses}
-                      ORDER BY weight ASC"); 
-  while($sdata = $result->fetchObject()) {
+                      ORDER BY weight ASC");
+  while ($sdata = $result->fetchObject()) {
     $statuses[] = $sdata->order_status_id;
   }
   $report->statuses = serialize($statuses);
 
   // Generate the report
   $data = uc_csv_select_report_to_export_submit($form, $form_state, $report);
-  
+
   if ($report->email_enable == FALSE) {
     // Save the report to our specified location or right here if nothing selected.
     _uc_csv_save_report($report, $data['contents'], $report->report_name);
@@ -182,7 +184,7 @@ function drush_uc_csv_export_report_validate($of = NULL, $id = NULL) {
       drush_set_error(dt('There is no report with an id of ' . $id));
       return FALSE;
     }
-  }    
+  }
 }
 
 /**
@@ -200,7 +202,7 @@ function drush_uc_csv_export_report($of, $id = NULL) {
     while ($rdata = $result->fetchObject()) {
       $options[$rdata->rid] = $rdata->report_name;
     }
-    
+
     $choice = drush_choice($options, dt('Which report do you wish to export?'));
     $form_state = array();
     $form_state['values']['rid'] = $choice;
@@ -211,7 +213,7 @@ function drush_uc_csv_export_report($of, $id = NULL) {
     $form_state['values']['rid'] = $id;
     $data = uc_csv_select_report_to_export_submit(array(), $form_state);
   }
-  
+
   $of = drush_get_option('of');
   if (!empty($of)) {
     _uc_csv_save_report($data['report'], $data['contents'], $of);

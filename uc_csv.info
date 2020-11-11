@@ -1,7 +1,8 @@
 name = CSV Export
 description = Export all order data to a CSV file for easy import into Excel or other spreadsheet software
 package = Ubercart - extra
-core = 7.x
+backdrop = 1.x
+type = module
 
 dependencies[] = uc_order
 dependencies[] = uc_product

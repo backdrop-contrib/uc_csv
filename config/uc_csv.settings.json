@@ -1,0 +1,6 @@
+{
+    "_config_name": "uc_csv.settings",
+    "uc_csv_enable_cron": "FALSE",
+    "uc_csv_report_interval": "86400",
+    "uc_csv_report_last_export": ""
+}
