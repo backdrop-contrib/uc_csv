@@ -123,9 +123,10 @@ function uc_csv_report_id_load($id) {
  */
 function uc_csv_config_info() {
   $prefixes['uc_csv.settings'] = array(
-    'label' => t('Module name settings'),
+    'label' => t('Ubercart CSV settings'),
     'group' => t('Configuration'),
   );
+  return $prefixes;
 }
 
 /**
